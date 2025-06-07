@@ -3,7 +3,13 @@
     <Step1CopyStructure v-if="currentStep === 1" @action="handleAction" :generated-context="shotgunPromptContext" :is-loading-context="props.isGeneratingContext" :project-root="props.projectRoot" :generation-progress="props.generationProgress" :platform="props.platform" />
     <Step2ComposePrompt v-if="currentStep === 2" @action="handleAction" ref="step2Ref" :file-list-context="props.shotgunPromptContext" @update:finalPrompt="(val) => emit('update-composed-prompt', val)" :platform="props.platform" :user-task="props.userTask" :rules-content="props.rulesContent" :final-prompt="props.finalPrompt" @update:userTask="(val) => emit('update:userTask', val)" @update:rulesContent="(val) => emit('update:rulesContent', val)" />
     <Step3ExecutePrompt v-if="currentStep === 3" @action="handleAction" ref="step3Ref" :initial-git-diff="initialGitDiff" :initial-split-line-limit="initialSplitLineLimit" @update:shotgunGitDiff="(val) => emit('update:shotgunGitDiff', val)" @update:splitLineLimit="(val) => emit('update:splitLineLimit', val)" />
-    <Step4ApplyPatch v-if="currentStep === 4" @action="handleAction" :split-diffs="props.splitDiffs" :is-loading="props.isLoadingSplitDiffs" :platform="props.platform" :split-line-limit="initialSplitLineLimit" />
+    <OpenRouterPanel v-else-if="currentStep === 4"
+      :input-text="props.finalPrompt"
+      @llm-success="(payload) => handleAction('openRouterLlmSuccess', payload)"
+      @llm-error="(payload) => handleAction('openRouterLlmError', payload)"
+      @add-log="(logArgs) => handleAction('addLog', logArgs)" />
+    <Step4ApplyPatch v-if="currentStep === 5" @action="handleAction" :split-diffs="props.splitDiffs" :is-loading="props.isLoadingSplitDiffs" :platform="props.platform" :split-line-limit="initialSplitLineLimit" />
+    <!-- Step 6 for Get Suggestions would go here if Step5GetSuggestions.vue existed and was imported -->
   </main>
 </template>
 
@@ -11,8 +17,10 @@
 import { defineProps, defineEmits, ref, computed, watch } from 'vue';
 import Step1CopyStructure from './steps/Step1PrepareContext.vue';
 import Step2ComposePrompt from './steps/Step2ComposePrompt.vue';
-import Step3ExecutePrompt from './steps/Step3ExecutePrompt.vue';
-import Step4ApplyPatch from './steps/Step4ApplyPatch.vue';
+import Step3ExecutePrompt from './steps/Step3ExecutePrompt.vue'; // Represents 3.A Split Diff
+import Step4ApplyPatch from './steps/Step4ApplyPatch.vue'; // Represents Apply Patch (now step 5)
+import OpenRouterPanel from './OpenRouterPanel.vue'; // Represents 3.B Execute prompt (now step 4)
+// Step5GetSuggestions not imported as it's not found yet.
 
 const props = defineProps({
   currentStep: { type: Number, required: true },
