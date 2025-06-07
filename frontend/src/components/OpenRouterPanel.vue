@@ -17,11 +17,6 @@
       <textarea id="systemPrompt" v-model="systemPrompt" rows="4"></textarea>
     </div>
 
-    <div class="form-group">
-      <label>Git Diff to Analyze (Read-only):</label>
-      <pre class="diff-display"><code>{{ shotgunGitDiff || 'No diff content provided.' }}</code></pre>
-    </div>
-
     <button @click="getSuggestions" :disabled="isLoading">
       <span v-if="isLoading">Loading...</span>
       <span v-else>Get Suggestions</span>
@@ -43,10 +38,10 @@ import { ref, defineProps, defineEmits } from 'vue';
 import { CallOpenRouter } from '../../wailsjs/go/main/App';
 
 const props = defineProps({
-  shotgunGitDiff: String,
+  inputText: String, // Renamed from shotgunGitDiff
 });
 
-const emits = defineEmits(['suggestions-obtained', 'suggestions-error']);
+const emits = defineEmits(['llm-success', 'llm-error']); // Renamed events
 
 const apiKey = ref('');
 const modelName = ref('openai/gpt-3.5-turbo'); // Default model
@@ -65,14 +60,14 @@ async function getSuggestions() {
   if (!apiKey.value) {
     errorMsg.value = 'OpenRouter API Key is required.';
     isLoading.value = false;
-    emits('suggestions-error', errorMsg.value);
+    emits('llm-error', errorMsg.value); // Changed event name
     return;
   }
 
-  if (!props.shotgunGitDiff) {
-    errorMsg.value = 'Diff content is empty. Cannot get suggestions.';
+  if (!props.inputText) { // Changed from props.shotgunGitDiff
+    errorMsg.value = 'Input text is empty. Cannot get suggestions.'; // Changed message
     isLoading.value = false;
-    emits('suggestions-error', errorMsg.value);
+    emits('llm-error', errorMsg.value); // Changed event name
     return;
   }
 
@@ -80,15 +75,15 @@ async function getSuggestions() {
     const result = await CallOpenRouter(
       apiKey.value,
       modelName.value,
-      props.shotgunGitDiff,
+      props.inputText, // Changed from props.shotgunGitDiff
       systemPrompt.value
     );
     suggestions.value = result;
-    emits('suggestions-obtained', result);
+    emits('llm-success', result); // Changed event name
   } catch (err) {
     console.error('Error calling OpenRouter:', err);
     errorMsg.value = `Failed to get suggestions: ${err.message || err}`;
-    emits('suggestions-error', errorMsg.value);
+    emits('llm-error', errorMsg.value); // Changed event name
   } finally {
     isLoading.value = false;
   }
