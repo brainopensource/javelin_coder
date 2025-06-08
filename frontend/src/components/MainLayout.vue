@@ -55,6 +55,8 @@ import HorizontalStepper from './HorizontalStepper.vue';
 import LeftSidebar from './LeftSidebar.vue';
 import CentralPanel from './CentralPanel.vue';
 import BottomConsole from './BottomConsole.vue';
+// OpenRouterPanel is rendered by CentralPanel, but importing here for clarity on the new step
+import OpenRouterPanel from './OpenRouterPanel.vue';
 import { ListFiles, RequestShotgunContextGeneration, SelectDirectory as SelectDirectoryGo, StartFileWatcher, StopFileWatcher, SetUseGitignore, SetUseCustomIgnore, SplitShotgunDiff } from '../../wailsjs/go/main/App';
 import { EventsOn, Environment } from '../../wailsjs/runtime/runtime';
 
@@ -62,8 +64,10 @@ const currentStep = ref(1);
 const steps = ref([
   { id: 1, title: 'Prepare Context', completed: false, description: 'Select project folder, review files, and generate the initial project context for the LLM.' },
   { id: 2, title: 'Compose Prompt', completed: false, description: 'Provide a prompt to the LLM based on the project context to generate a code diff.' },
-  { id: 3, title: 'Execute Prompt', completed: false, description: 'Paste a large shotgunDiff and split it into smaller, manageable parts.' },
-  { id: 4, title: 'Apply Patch', completed: false, description: 'Copy and apply the smaller diff parts to your project.' },
+  { id: 3, title: '3.A Split Diff', completed: false, description: 'Paste a large shotgunDiff and split it into smaller, manageable parts.' },
+  { id: 4, title: '3.B Execute prompt', completed: false, description: 'Execute the prompt using an external LLM API.' },
+  { id: 5, title: 'Apply Patch', completed: false, description: 'Copy and apply the smaller diff parts to your project.' },
+  { id: 6, title: 'Get Suggestions', completed: false, description: 'Use OpenRouter API to get suggestions on your diff.' },
 ]);
 
 const logMessages = ref([]);
@@ -83,7 +87,9 @@ function addLog(message, type = 'info', targetConsole = 'bottom') {
     logMessages.value.push(logEntry);
   }
   if (targetConsole === 'step' || targetConsole === 'both') {
-    if (centralPanelRef.value && currentStep.value === 3 && centralPanelRef.value.addLogToStep3Console) {
+    // Adjusted step for logging, assuming step 3.A (Split Diff) might have its own console.
+    // If OpenRouterPanel (step 3.B) needs specific logging, CentralPanel will need a way to route it.
+    if (centralPanelRef.value && currentStep.value === 3 && centralPanelRef.value.addLogToStep3Console) { // Assuming step 3 (now 3.A) has the console
       centralPanelRef.value.addLogToStep3Console(message, type);
     }
   }
@@ -105,9 +111,10 @@ const userTask = ref('');
 const rulesContent = ref('');
 const finalPrompt = ref('');
 const isLoadingSplitDiffs = ref(false);
-const splitDiffs = ref([]);
-const shotgunGitDiff = ref('');
-const splitLineLimitValue = ref(0); // Add new state variable
+const splitDiffs = ref([]); // This is where SplitShotgunDiff results are stored
+const shotgunGitDiff = ref(''); // For step 3.A
+const openRouterRawDiff = ref(''); // For step 3.B output
+const splitLineLimitValue = ref(0);
 let debounceTimer = null;
 
 // Watcher related
@@ -405,11 +412,16 @@ async function handleStepAction(actionName, payload) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       addLog('Backend: LLM call simulated. (Mocked response/diff would be processed here).', 'info', 'step');
       if (currentStepObj) currentStepObj.completed = true;
-      // For now, just navigate to Step 4, as Step 3's "execution" is conceptual.
-      // In a real app, Step 3 might display LLM output before proceeding.
-      navigateToStep(4); 
+      // This case was for the original 'Execute Prompt' which is now '3.A Split Diff'
+      // We need a new case for '3.B Execute prompt' which will be handled by OpenRouterPanel.
+      // For now, let's assume 'executePrompt' action is still valid for step 3.A.
+      // The navigation to step 4 (now step 5 'Apply Patch') should happen after step 3.A completes.
+      if (currentStepObj && currentStepObj.id === 3) { // If current step is 3.A Split Diff
+          navigateToStep(5); // Navigate to Apply Patch (formerly 4, now 5)
+      }
+      // If the action was from another step, or if we want to allow re-execution, this logic might need adjustment.
       break;
-    case 'executePromptAndSplitDiff': // Handle the actual splitting action
+    case 'executePromptAndSplitDiff': // This action is for Step 3.A (Split Diff)
       if (!payload || !payload.gitDiff || payload.lineLimit <= 0) {
         addLog("Invalid payload for splitting diff.", 'error', 'bottom');
         return;
@@ -424,8 +436,10 @@ async function handleStepAction(actionName, payload) {
         splitDiffs.value = result;
         addLog(`Diff split into ${result.length} parts.`, 'success', 'bottom');
         
-        if (currentStepObj) currentStepObj.completed = true;
-        navigateToStep(4);
+        if (currentStepObj) currentStepObj.completed = true; // Mark 3.A as complete
+        // Do not automatically navigate to Apply Patch (5). User might want to go to 3.B (4) next.
+        // Let user click "Next" or the step itself.
+        // navigateToStep(5); // Old: navigate to Apply Patch (formerly 4, now 5)
 
       } catch (err) {
         const errorMsg = `Error splitting diff: ${err.message || err}`;
@@ -444,6 +458,69 @@ async function handleStepAction(actionName, payload) {
     case 'finishSplitting':
       addLog("Finished with split diffs.", 'info', 'bottom');
       if (currentStepObj) currentStepObj.completed = true;
+      // Potentially navigate to step 5 if it's the next logical step
+      // For now, user clicks to navigate or it's handled by completing step 3/4
+      break;
+    case 'openRouterLlmSuccess': // Event from OpenRouterPanel via CentralPanel
+      addLog("LLM execution via OpenRouter succeeded. Preparing to split diff.", "success", "bottom");
+      openRouterRawDiff.value = payload; // Store the raw diff from OpenRouter
+      isLoadingSplitDiffs.value = true; // Show loading state for diff splitting
+
+      if (currentStep.value === 4) { // Ensure we are on "3.B Execute prompt"
+        const step3B = steps.value.find(s => s.id === 4); // Should be steps.value[3]
+
+        if (!openRouterRawDiff.value) {
+            addLog("OpenRouter diff is empty. Cannot split.", 'error', 'bottom');
+            if (step3B) step3B.completed = false; // Or some error status if available
+            isLoadingSplitDiffs.value = false;
+            break;
+        }
+        if (splitLineLimitValue.value <= 0) {
+            addLog(`Invalid split line limit: ${splitLineLimitValue.value}. Using default of 500.`, 'warn', 'bottom');
+            // Optionally set a default, or rely on backend default if any.
+            // For now, assuming SplitShotgunDiff can handle 0 or backend has a default.
+            // If not, this should be prevented earlier or handled more gracefully.
+        }
+
+        try {
+          // Use openRouterRawDiff.value and splitLineLimitValue.value directly
+          const result = await SplitShotgunDiff(openRouterRawDiff.value, splitLineLimitValue.value);
+          splitDiffs.value = result; // Store the split diffs for Step 5 (Apply Patch)
+          addLog(`OpenRouter diff split into ${result.length} parts.`, 'success', 'bottom');
+
+          if (step3B) step3B.completed = true;
+          navigateToStep(5); // Navigate to "Apply Patch" (id: 5)
+        } catch (err) {
+          const errorMsg = `Error splitting OpenRouter diff: ${err.message || err}`;
+          addLog(errorMsg, 'error', 'bottom');
+          if (step3B) step3B.completed = false; // Or set to error status
+          // Optionally, could clear splitDiffs.value or openRouterRawDiff.value here
+        } finally {
+          isLoadingSplitDiffs.value = false;
+        }
+      } else {
+         addLog("Received OpenRouter LLM success but not on the correct step (3.B). Diff not split.", "warn", "bottom");
+      }
+      break;
+    case 'openRouterLlmError': // Event from OpenRouterPanel via CentralPanel
+      addLog(`LLM execution via OpenRouter error: ${payload}`, "error", "bottom");
+      if (currentStep.value === 4) { // "3.B Execute prompt"
+        const step3B = steps.value.find(s => s.id === 4);
+        if (step3B) step3B.completed = false; // Mark as not complete (or error status)
+      }
+      break;
+    case 'openRouterSuggestionsObtained':
+      addLog("OpenRouter suggestions obtained.", "success", "bottom");
+      if (currentStep.value === 6) { // Ensure we are on the correct step (formerly 5, now 6)
+        const step6 = steps.value.find(s => s.id === 6);
+        if (step6) step6.completed = true;
+        // addLog(`Suggestions: ${payload}`, 'debug', 'bottom'); // Payload might be large
+      }
+      // Decide if we navigate to another step or stay
+      break;
+    case 'openRouterSuggestionsError':
+      addLog(`OpenRouter error: ${payload}`, "error", "bottom");
+      // Step 6 (formerly 5) remains incomplete
       break;
     default:
       addLog(`Unknown action: ${actionName}`, 'error', 'bottom');
