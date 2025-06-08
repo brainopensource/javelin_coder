@@ -123,7 +123,7 @@ func (a *App) ListFiles(dirPath string) ([]*FileNode, error) {
 		IsCustomIgnored: a.currentCustomIgnorePatterns != nil && a.currentCustomIgnorePatterns.MatchesPath("."),
 	}
 
-	children, err := buildTreeRecursive(context.TODO(), dirPath, dirPath, gitIgn, a.currentCustomIgnorePatterns, 0)
+	children, err := buildTreeRecursive(a.ctx, dirPath, dirPath, gitIgn, a.currentCustomIgnorePatterns, 0)
 	if err != nil {
 		return []*FileNode{rootNode}, fmt.Errorf("error building children tree for %s: %w", dirPath, err)
 	}
@@ -168,7 +168,7 @@ func buildTreeRecursive(ctx context.Context, currentPath, rootPath string, gitIg
 		}
 
 		if depth < 2 || strings.Contains(relPath, "node_modules") || strings.HasSuffix(relPath, ".log") {
-			fmt.Printf("Checking path: '%s' (original relPath: '%s'), IsDir: %v, Gitignored: %v, CustomIgnored: %v\n", pathToMatch, relPath, entry.IsDir(), isGitignored, isCustomIgnored)
+			runtime.LogDebugf(ctx, "Checking path: '%s' (original relPath: '%s'), IsDir: %v, Gitignored: %v, CustomIgnored: %v", pathToMatch, relPath, entry.IsDir(), isGitignored, isCustomIgnored)
 		}
 
 		node := &FileNode{
@@ -461,7 +461,7 @@ func (a *App) generateShotgunOutputWithProgress(jobCtx context.Context, rootDir 
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						return err
 					}
-					fmt.Printf("Error processing subdirectory %s: %v\n", path, err)
+					runtime.LogWarningf(a.ctx, "Error processing subdirectory %s: %v", path, err)
 				}
 			} else {
 				select { // Check before heavy I/O
@@ -471,7 +471,7 @@ func (a *App) generateShotgunOutputWithProgress(jobCtx context.Context, rootDir 
 				}
 				content, err := os.ReadFile(path)
 				if err != nil {
-					fmt.Printf("Error reading file %s: %v\n", path, err)
+					runtime.LogWarningf(a.ctx, "Error reading file %s: %v", path, err)
 					content = []byte(fmt.Sprintf("Error reading file: %v", err))
 				}
 
