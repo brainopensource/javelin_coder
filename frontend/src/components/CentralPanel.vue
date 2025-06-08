@@ -2,12 +2,14 @@
   <main class="flex-1 p-0 overflow-y-auto bg-white relative">
     <Step1CopyStructure v-if="currentStep === 1" @action="handleAction" :generated-context="shotgunPromptContext" :is-loading-context="props.isGeneratingContext" :project-root="props.projectRoot" :generation-progress="props.generationProgress" :platform="props.platform" />
     <Step2ComposePrompt v-if="currentStep === 2" @action="handleAction" ref="step2Ref" :file-list-context="props.shotgunPromptContext" @update:finalPrompt="(val) => emit('update-composed-prompt', val)" :platform="props.platform" :user-task="props.userTask" :rules-content="props.rulesContent" :final-prompt="props.finalPrompt" @update:userTask="(val) => emit('update:userTask', val)" @update:rulesContent="(val) => emit('update:rulesContent', val)" />
-    <Step3ExecutePrompt v-if="currentStep === 3" @action="handleAction" ref="step3Ref" :initial-git-diff="initialGitDiff" :initial-split-line-limit="initialSplitLineLimit" @update:shotgunGitDiff="(val) => emit('update:shotgunGitDiff', val)" @update:splitLineLimit="(val) => emit('update:splitLineLimit', val)" />
+    <Step3ExecutePrompt v-if="currentStep === 3" @action="handleAction" ref="step3Ref" :initial-git-diff="initialGitDiff" :initial-split-line-limit="initialSplitLineLimit" @update:shotgunGitDiff="(val) => emit('update:shotgunGitDiff', val)" @update:splitLineLimit="(val) => emit('update:splitLineLimit', val)" :final-prompt="props.finalPrompt" :open-router-api-key="props.openRouterApiKey" />
     <OpenRouterPanel v-else-if="currentStep === 4"
       :input-text="props.finalPrompt"
+      :api-key="props.openRouterApiKey"
       @llm-success="(payload) => handleAction('openRouterLlmSuccess', payload)"
       @llm-error="(payload) => handleAction('openRouterLlmError', payload)"
-      @add-log="(logArgs) => handleAction('addLog', logArgs)" />
+      @add-log="(logArgs) => handleAction('addLog', logArgs)"
+      @update:api-key="(newKey) => emit('update:openRouterApiKey', newKey)" />
     <Step4ApplyPatch v-if="currentStep === 5" @action="handleAction" :split-diffs="props.splitDiffs" :is-loading="props.isLoadingSplitDiffs" :platform="props.platform" :split-line-limit="initialSplitLineLimit" />
     <!-- Step 6 for Get Suggestions would go here if Step5GetSuggestions.vue existed and was imported -->
   </main>
@@ -35,7 +37,8 @@ const props = defineProps({
   splitDiffs: { type: Array, default: () => [] },
   isLoadingSplitDiffs: { type: Boolean, default: false },
   shotgunGitDiff: { type: String, default: '' },
-  splitLineLimitValue: { type: Number, default: 0 }
+  splitLineLimitValue: { type: Number, default: 0 },
+  openRouterApiKey: { type: String, default: '' },
 });
 
 const initialGitDiff = computed(() => {
@@ -48,7 +51,7 @@ const initialSplitLineLimit = computed(() => {
     return value;
 });
 
-const emit = defineEmits(['stepAction', 'update-composed-prompt', 'update:userTask', 'update:rulesContent', 'update:shotgunGitDiff', 'update:splitLineLimit']);
+const emit = defineEmits(['stepAction', 'update-composed-prompt', 'update:userTask', 'update:rulesContent', 'update:shotgunGitDiff', 'update:splitLineLimit', 'update:openRouterApiKey']);
 
 const step2Ref = ref(null);
 const step3Ref = ref(null);

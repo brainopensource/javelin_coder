@@ -37,6 +37,7 @@
                     @update:rules-content="handleRulesContentUpdate"
                     @update:shotgunGitDiff="handleShotgunGitDiffUpdate"
                     @update:splitLineLimit="handleSplitLineLimitUpdate"
+                    @update:open-router-api-key="(newKey) => { openRouterApiKey.value = newKey; }"
                     ref="centralPanelRef" />
     </div>
     <div 
@@ -114,6 +115,7 @@ const isLoadingSplitDiffs = ref(false);
 const splitDiffs = ref([]); // This is where SplitShotgunDiff results are stored
 const shotgunGitDiff = ref(''); // For step 3.A
 const openRouterRawDiff = ref(''); // For step 3.B output
+const openRouterApiKey = ref(''); // Added for OpenRouter API Key
 const splitLineLimitValue = ref(0);
 let debounceTimer = null;
 

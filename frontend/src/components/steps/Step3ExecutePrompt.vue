@@ -2,8 +2,7 @@
   <div class="p-6 flex flex-col h-full">
     <h2 class="text-xl font-semibold text-gray-800 mb-2">Step 3: Execute Prompt</h2>
     <p class="text-gray-600 mb-2">
-      <li>For now go to Google AI studio, copy the prompt and paste it there with 2.5 pro model with 0.1 temperature. It will give you <b>the diff</b></li>
-      <li>Then open any agentic code tool and ask 'apply diff' + copy-paste the diff. </li>
+      You can paste a diff directly into the textarea below, or use the 'Get Diff from OpenRouter' button to generate it using the prompt from Step 2.
     </p>
     <p class="text-gray-600 mb-2">
     <hr class="my-4"/>
@@ -11,6 +10,16 @@
       <br>
       This tool will split the diff into smaller parts to make it easier to apply.
     </p>
+    <div class="my-4">
+      <button
+        @click="fetchDiffFromOpenRouter"
+        :disabled="isLoading || !props.openRouterApiKey" # TODO: Refine this condition based on final API key handling
+        class="px-4 py-2 mr-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 self-start disabled:bg-gray-400"
+      >
+        {{ isLoading ? 'Fetching Diff...' : 'Get Diff from OpenRouter' }}
+      </button>
+      <p v-if="errorMessage" class="text-red-500 text-sm mt-2">{{ errorMessage }}</p>
+    </div>
     <div class="mb-4">
       <label for="shotgun-git-diff-input" class="block text-sm font-bold text-gray-700 mb-1">Git Diff Output:</label>
       <textarea
@@ -56,6 +65,7 @@
 <script setup>
 import { ref, defineEmits, watch, computed, onMounted, onBeforeUnmount } from 'vue';
 import { LogInfo as LogInfoRuntime, LogError as LogErrorRuntime } from '../../../wailsjs/runtime/runtime';
+import { CallOpenRouter } from '../../../wailsjs/go/main/App';
 
 const emit = defineEmits(['action', 'update:shotgunGitDiff', 'update:splitLineLimit']);
 
@@ -67,10 +77,19 @@ const props = defineProps({
   initialSplitLineLimit: {
     type: Number,
     default: 0
+  },
+  finalPrompt: {
+    type: String,
+    default: ''
+  },
+  openRouterApiKey: {
+    type: String,
+    default: ''
   }
 });
 
-
+const isLoading = ref(false);
+const errorMessage = ref('');
 const localShotgunGitDiffInput = ref(props.initialGitDiff);
 
 const localSplitLineLimit = ref(props.initialSplitLineLimit > 0 ? props.initialSplitLineLimit : 500);
@@ -177,5 +196,49 @@ const resetSplitLineLimit = () => {
   } else {
     localSplitLineLimit.value = 500;
   }
-}
+};
+
+const fetchDiffFromOpenRouter = async () => {
+  LogInfoRuntime("fetchDiffFromOpenRouter called");
+  isLoading.value = true;
+  errorMessage.value = '';
+
+  if (!props.openRouterApiKey) {
+    errorMessage.value = "OpenRouter API Key is not set.";
+    isLoading.value = false;
+    LogErrorRuntime(errorMessage.value);
+    return;
+  }
+
+  if (!props.finalPrompt) {
+    errorMessage.value = "The prompt from Step 2 is empty.";
+    isLoading.value = false;
+    LogErrorRuntime(errorMessage.value);
+    return;
+  }
+
+  const modelName = "openai/gpt-3.5-turbo"; // Or a more suitable model for diffs
+  const systemPrompt = "You are an AI assistant that generates Git diffs based on user requests. Ensure the output is only the diff in standard Git format, without any explanations or conversational text. Start the diff directly with 'diff --git ...' or the equivalent for the type of change requested.";
+
+  try {
+    LogInfoRuntime(`Calling OpenRouter with model: ${modelName}, prompt: "${props.finalPrompt}"`);
+    const response = await CallOpenRouter(props.openRouterApiKey, modelName, props.finalPrompt, systemPrompt);
+    localShotgunGitDiffInput.value = response;
+    LogInfoRuntime("Successfully fetched diff from OpenRouter.");
+    // Automatically update line limit if the new diff has different line count
+    const lines = response ? response.split('\n').length : 0;
+    if (lines > 0 && lines !== localSplitLineLimit.value) {
+        localSplitLineLimit.value = lines;
+    } else if (lines === 0) {
+        localSplitLineLimit.value = 500; // Reset to default if diff is empty
+    }
+
+  } catch (error) {
+    const errorMsg = `Error fetching diff from OpenRouter: ${error}`;
+    LogErrorRuntime(errorMsg);
+    errorMessage.value = errorMsg;
+  } finally {
+    isLoading.value = false;
+  }
+};
 </script> 

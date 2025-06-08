@@ -4,7 +4,7 @@
 
     <div class="form-group">
       <label for="apiKey">OpenRouter API Key:</label>
-      <input type="password" id="apiKey" v-model="apiKey" placeholder="sk-or-..." />
+      <input type="password" id="apiKey" v-model="localApiKey" placeholder="sk-or-..." />
     </div>
 
     <div class="form-group">
@@ -34,16 +34,17 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits } from 'vue';
+import { ref, defineProps, defineEmits, watch } from 'vue';
 import { CallOpenRouter } from '../../wailsjs/go/main/App';
 
 const props = defineProps({
   inputText: String, // Renamed from shotgunGitDiff
+  apiKey: String,
 });
 
-const emits = defineEmits(['llm-success', 'llm-error']); // Renamed events
+const emits = defineEmits(['llm-success', 'llm-error', 'update:apiKey']); // Renamed events & added update:apiKey
 
-const apiKey = ref('');
+const localApiKey = ref('');
 const modelName = ref('openai/gpt-3.5-turbo'); // Default model
 const systemPrompt = ref(
   'You are a code review assistant. Analyze the provided diff and return your suggestions as a code block or in a diff format.'
@@ -57,7 +58,7 @@ async function getSuggestions() {
   errorMsg.value = '';
   suggestions.value = '';
 
-  if (!apiKey.value) {
+  if (!localApiKey.value) {
     errorMsg.value = 'OpenRouter API Key is required.';
     isLoading.value = false;
     emits('llm-error', errorMsg.value); // Changed event name
@@ -73,7 +74,7 @@ async function getSuggestions() {
 
   try {
     const result = await CallOpenRouter(
-      apiKey.value,
+      localApiKey.value,
       modelName.value,
       props.inputText, // Changed from props.shotgunGitDiff
       systemPrompt.value
@@ -88,6 +89,16 @@ async function getSuggestions() {
     isLoading.value = false;
   }
 }
+
+watch(localApiKey, (newValue) => {
+  emits('update:apiKey', newValue);
+});
+
+watch(() => props.apiKey, (newVal) => {
+  if (newVal !== localApiKey.value) {
+    localApiKey.value = newVal;
+  }
+}, { immediate: true });
 </script>
 
 <style scoped>
