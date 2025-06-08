@@ -10,9 +10,45 @@
       <br>
       This tool will split the diff into smaller parts to make it easier to apply.
     </p>
-    <div class="my-4">      <button
+
+    <div class="my-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="openrouter-api-key" class="block text-sm font-bold text-gray-700 mb-1">OpenRouter API Key:</label>
+        <input
+          type="password"
+          id="openrouter-api-key"
+          v-model="localOpenRouterApiKey"
+          class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+          placeholder="sk-or-..."
+        />
+      </div>
+      <div>
+        <label for="model-name" class="block text-sm font-bold text-gray-700 mb-1">Model Name:</label>
+        <input
+          type="text"
+          id="model-name"
+          v-model="localModelName"
+          class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+          placeholder="e.g., openai/gpt-3.5-turbo"
+        />
+      </div>
+    </div>
+
+    <div class="my-4">
+        <label for="final-prompt" class="block text-sm font-bold text-gray-700 mb-1">Final Prompt (from Step 2):</label>
+        <textarea
+          id="final-prompt"
+          :value="props.finalPrompt"
+          rows="5"
+          class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-mono bg-gray-100"
+          readonly
+        ></textarea>
+    </div>
+
+    <div class="my-4">
+      <button
         @click="fetchDiffFromOpenRouter"
-        :disabled="isLoading || !props.openRouterApiKey"
+        :disabled="isLoading || !localOpenRouterApiKey"
         class="px-4 py-2 mr-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 self-start disabled:bg-gray-400"
       >
         {{ isLoading ? 'Fetching Diff...' : 'Get Diff from OpenRouter' }}
@@ -66,7 +102,7 @@ import { ref, defineEmits, watch, computed, onMounted, onBeforeUnmount } from 'v
 import { LogInfo as LogInfoRuntime, LogError as LogErrorRuntime } from '../../../wailsjs/runtime/runtime';
 import { CallOpenRouter } from '../../../wailsjs/go/main/App';
 
-const emit = defineEmits(['action', 'update:shotgunGitDiff', 'update:splitLineLimit']);
+const emit = defineEmits(['action', 'update:shotgunGitDiff', 'update:splitLineLimit', 'update:openRouterApiKey']);
 
 const props = defineProps({
   initialGitDiff: {
@@ -91,11 +127,26 @@ const isLoading = ref(false);
 const errorMessage = ref('');
 const localShotgunGitDiffInput = ref(props.initialGitDiff);
 
+const localOpenRouterApiKey = ref(props.openRouterApiKey);
+const localModelName = ref('openai/gpt-3.5-turbo'); // Default model
+
 const localSplitLineLimit = ref(props.initialSplitLineLimit > 0 ? props.initialSplitLineLimit : 500);
+
+watch(() => props.openRouterApiKey, (newVal) => {
+  if (newVal !== localOpenRouterApiKey.value) {
+    localOpenRouterApiKey.value = newVal;
+  }
+});
+
+watch(localOpenRouterApiKey, (newVal) => {
+  emit('update:openRouterApiKey', newVal);
+});
+
 
 onMounted(() => {
     
   localShotgunGitDiffInput.value = props.initialGitDiff;
+  localOpenRouterApiKey.value = props.openRouterApiKey;
 
     
   if (props.initialSplitLineLimit > 0) {
@@ -202,8 +253,8 @@ const fetchDiffFromOpenRouter = async () => {
   isLoading.value = true;
   errorMessage.value = '';
 
-  if (!props.openRouterApiKey) {
-    errorMessage.value = "OpenRouter API Key is not set.";
+  if (!localOpenRouterApiKey.value) {
+    errorMessage.value = "OpenRouter API Key is not set. Please enter it above.";
     isLoading.value = false;
     LogErrorRuntime(errorMessage.value);
     return;
@@ -216,12 +267,11 @@ const fetchDiffFromOpenRouter = async () => {
     return;
   }
 
-  const modelName = "openai/gpt-3.5-turbo"; // Or a more suitable model for diffs
   const systemPrompt = "You are an AI assistant that generates Git diffs based on user requests. Ensure the output is only the diff in standard Git format, without any explanations or conversational text. Start the diff directly with 'diff --git ...' or the equivalent for the type of change requested.";
 
   try {
-    LogInfoRuntime(`Calling OpenRouter with model: ${modelName}, prompt: "${props.finalPrompt}"`);
-    const response = await CallOpenRouter(props.openRouterApiKey, modelName, props.finalPrompt, systemPrompt);
+    LogInfoRuntime(`Calling OpenRouter with model: ${localModelName.value}, prompt: "${props.finalPrompt}"`);
+    const response = await CallOpenRouter(localOpenRouterApiKey.value, localModelName.value, props.finalPrompt, systemPrompt);
     localShotgunGitDiffInput.value = response;
     LogInfoRuntime("Successfully fetched diff from OpenRouter.");
     // Automatically update line limit if the new diff has different line count
