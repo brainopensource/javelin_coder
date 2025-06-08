@@ -10,10 +10,9 @@
       <br>
       This tool will split the diff into smaller parts to make it easier to apply.
     </p>
-    <div class="my-4">
-      <button
+    <div class="my-4">      <button
         @click="fetchDiffFromOpenRouter"
-        :disabled="isLoading || !props.openRouterApiKey" # TODO: Refine this condition based on final API key handling
+        :disabled="isLoading || !props.openRouterApiKey"
         class="px-4 py-2 mr-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 self-start disabled:bg-gray-400"
       >
         {{ isLoading ? 'Fetching Diff...' : 'Get Diff from OpenRouter' }}

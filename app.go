@@ -1,20 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-	"bytes"
-	"net/http"
 
 	"github.com/adrg/xdg"
 	"github.com/fsnotify/fsnotify"
@@ -1032,7 +1033,7 @@ func (a *App) CallOpenRouter(apiKey string, modelName string, diffContent string
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("HTTP-Referer", "shotgun-app") // Optional, as per documentation
-	req.Header.Set("X-Title", "shotgun-app")       // Optional, as per documentation
+	req.Header.Set("X-Title", "shotgun-app")      // Optional, as per documentation
 
 	client := &http.Client{Timeout: 60 * time.Second} // Consider making timeout configurable
 	resp, err := client.Do(req)
@@ -1041,9 +1042,8 @@ func (a *App) CallOpenRouter(apiKey string, modelName string, diffContent string
 		return "", fmt.Errorf("error sending request: %w", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := os.ReadAll(resp.Body) // Read body for error context
+		bodyBytes, _ := io.ReadAll(resp.Body) // Read body for error context
 		errMsg := fmt.Sprintf("OpenRouter API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 		runtime.LogErrorf(a.ctx, errMsg)
 		return "", errors.New(errMsg)
