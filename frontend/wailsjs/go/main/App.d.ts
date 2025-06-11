@@ -3,6 +3,8 @@
 import {main} from '../models';
 import {context} from '../models';
 
+export function CallOpenRouter(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
 export function GetCustomIgnoreRules():Promise<string>;
 
 export function GetCustomPromptRules():Promise<string>;
